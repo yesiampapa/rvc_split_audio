@@ -4,22 +4,10 @@
 
 `chmod +x split.py`
 
-```./split.py --input_dir path/to --output_dir path/to --min_silence_len 300 --silence_thresh -50 --min_sec 1 --max_sec 5 --fade_ms 10 --gap_ms 100```
+```./split.py```
 
----
-
-`--input_dir` 入力フォルダ（複数ファイルがあっても可）
-
-`--output_dir` 出力フォルダ
-
-`--min_silence_len` 最小の無音長
-
-`--silence_thresh` 無音のスレッショルド
-
-`--min_sec` 分割ファイルの最短時間
-
-`--max_sec` 分割ファイルの最長時間
-
-`--fade_ms` 短いピース同士の結合時に発声するクリックを防ぐために適用するフェード時間
-
-`--gap_ms` 短いピース同士の結合時のギャップ時間
+可能な限り分節（自然な無音部分）で分割して指定秒数に収まるように切り貼りしてくれます。
+どうしても収まらない音声部分は無音を追加して最長で合わせます。
+結合時のクリック音を防ぐためにフェード部分を追加して滑らかにします。
+可能な限り劣化しないように。
+基本的にすべてデフォルトでOK。
