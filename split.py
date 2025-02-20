@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import argparse
 import multiprocessing
 from functools import partial
 from pydub import AudioSegment, silence
@@ -181,47 +180,132 @@ def process_one_wav(path,
         print(f"Exported: {out_path} (length={len(ch)} ms)")
 
 ########################################
-# メイン (マルチプロセス対応)
+# 対話形式メイン
 ########################################
 def main():
-    parser = argparse.ArgumentParser(description="""
-    - 無音で分割 → 5秒超は音量の低い部分で分割(フェード) →
-      短いチャンク(<1s)を前後と合体(フェード+無音) or パディング → 出力
-    - Can't pickle local object 対策で、すべての関数をトップレベルに定義し、
-      functools.partial を使って pool.map で並列実行。
-    """)
-    parser.add_argument("--input_dir", required=True)
-    parser.add_argument("--output_dir", required=True)
-    parser.add_argument("--min_silence_len", type=int, default=300)
-    parser.add_argument("--silence_thresh", type=int, default=-40)
-    parser.add_argument("--min_sec", type=int, default=1)
-    parser.add_argument("--max_sec", type=int, default=5)
-    parser.add_argument("--fade_ms", type=int, default=10)
-    parser.add_argument("--gap_ms", type=int, default=100)
-    parser.add_argument("--workers", type=int, default=None)
-    args = parser.parse_args()
+    # プログラム自身が置かれているディレクトリを取得
+    script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # 入力フォルダのWAV一覧
-    wav_files = [os.path.join(args.input_dir, f)
-                 for f in os.listdir(args.input_dir)
+    print("===============================================")
+    print(" 音声ファイル分割＆整形スクリプト (対話形式版)")
+    print("===============================================")
+    print(" 以下の質問に答えてください。Enterのみで既定値が適用されます。\n")
+
+    # --input_dir
+    default_input = script_dir
+    input_dir = input(f"[入力ディレクトリ] (デフォルト: {default_input}): ").strip()
+    if not input_dir:
+        input_dir = default_input
+
+    # --output_dir
+    default_output = os.path.join(script_dir, "split_output")
+    output_dir = input(f"[出力ディレクトリ] (デフォルト: {default_output}): ").strip()
+    if not output_dir:
+        output_dir = default_output
+
+    # --min_silence_len (int)
+    default_min_silence_len = 300
+    tmp = input(f"[min_silence_len] (デフォルト: {default_min_silence_len} ms): ").strip()
+    if not tmp:
+        min_silence_len = default_min_silence_len
+    else:
+        min_silence_len = int(tmp)
+
+    # --silence_thresh (int)
+    default_silence_thresh = -60
+    tmp = input(f"[silence_thresh] (デフォルト: {default_silence_thresh} dB): ").strip()
+    if not tmp:
+        silence_thresh = default_silence_thresh
+    else:
+        silence_thresh = int(tmp)
+
+    # --min_sec
+    default_min_sec = 1
+    tmp = input(f"[min_sec] (デフォルト: {default_min_sec} 秒): ").strip()
+    if not tmp:
+        min_sec = default_min_sec
+    else:
+        min_sec = int(tmp)
+
+    # --max_sec
+    default_max_sec = 5
+    tmp = input(f"[max_sec] (デフォルト: {default_max_sec} 秒): ").strip()
+    if not tmp:
+        max_sec = default_max_sec
+    else:
+        max_sec = int(tmp)
+
+    # --fade_ms
+    default_fade_ms = 10
+    tmp = input(f"[fade_ms] (デフォルト: {default_fade_ms} ms): ").strip()
+    if not tmp:
+        fade_ms = default_fade_ms
+    else:
+        fade_ms = int(tmp)
+
+    # --gap_ms
+    default_gap_ms = 100
+    tmp = input(f"[gap_ms] (デフォルト: {default_gap_ms} ms): ").strip()
+    if not tmp:
+        gap_ms = default_gap_ms
+    else:
+        gap_ms = int(tmp)
+
+    # --workers
+    cpu_count = multiprocessing.cpu_count()
+    print(f"\nCPUコア数: {cpu_count}")
+    tmp = input(f"[workers] (並列数。未指定なら自動(推奨)): ").strip()
+    if not tmp:
+        workers = None
+    else:
+        workers = int(tmp)
+
+    print("\n============ 入力確認 ============")
+    print(f"  input_dir        = {input_dir}")
+    print(f"  output_dir       = {output_dir}")
+    print(f"  min_silence_len  = {min_silence_len}")
+    print(f"  silence_thresh   = {silence_thresh}")
+    print(f"  min_sec          = {min_sec}")
+    print(f"  max_sec          = {max_sec}")
+    print(f"  fade_ms          = {fade_ms}")
+    print(f"  gap_ms           = {gap_ms}")
+    print(f"  workers          = {workers if workers else '(auto)'}")
+    print("===================================")
+
+    # 対象WAVファイルを検索
+    if not os.path.isdir(input_dir):
+        print(f"エラー: 入力ディレクトリが存在しません: {input_dir}")
+        return
+
+    wav_files = [os.path.join(input_dir, f)
+                 for f in os.listdir(input_dir)
                  if f.lower().endswith(".wav")]
+    if not wav_files:
+        print(f"指定フォルダ内に .wav ファイルが見つかりませんでした: {input_dir}")
+        return
 
-    # functools.partial で引数を固定した関数オブジェクトを作成
-    from functools import partial
+    print(f"\n{len(wav_files)} 件のWAVファイルを処理します...")
+
+    # functools.partial で定数引数をバインド
     func = partial(
         process_one_wav,
-        output_dir=args.output_dir,
-        min_silence_len=args.min_silence_len,
-        silence_thresh=args.silence_thresh,
-        min_sec=args.min_sec,
-        max_sec=args.max_sec,
-        fade_ms=args.fade_ms,
-        gap_ms=args.gap_ms
+        output_dir=output_dir,
+        min_silence_len=min_silence_len,
+        silence_thresh=silence_thresh,
+        min_sec=min_sec,
+        max_sec=max_sec,
+        fade_ms=fade_ms,
+        gap_ms=gap_ms
     )
 
-    # マルチプロセスでファイル単位に実行
-    with multiprocessing.Pool(processes=args.workers) as pool:
+    # 出力ディレクトリ作成
+    os.makedirs(output_dir, exist_ok=True)
+
+    # マルチプロセスで実行
+    with multiprocessing.Pool(processes=workers) as pool:
         pool.map(func, wav_files)
+
+    print("\nすべての処理が完了しました。")
 
 if __name__ == "__main__":
     main()
